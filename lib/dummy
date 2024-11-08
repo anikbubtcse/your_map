@@ -1,0 +1,133 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:location/location.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: MapPage(),
+    );
+  }
+}
+
+class MapPage extends StatefulWidget {
+  @override
+  _MapPageState createState() => _MapPageState();
+}
+
+class _MapPageState extends State<MapPage> {
+  GoogleMapController? _mapController;
+  LatLng? _currentPosition;
+  Set<Marker> _markers = {};
+  String _address = "Click on the map to get address";
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissions();
+  }
+
+  // Check location permissions
+  Future<void> _checkPermissions() async {
+    PermissionStatus permissionStatus = await Permission.location.request();
+
+    if (permissionStatus.isGranted) {
+      _getCurrentLocation();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location permission is required')));
+    }
+  }
+
+  // Get current location
+  Future<void> _getCurrentLocation() async {
+    Location location = Location();
+    bool _serviceEnabled = await location.serviceEnabled();
+    if (!_serviceEnabled) {
+      _serviceEnabled = await location.requestService();
+      if (!_serviceEnabled) {
+        return;
+      }
+    }
+
+    PermissionStatus _permissionGranted = await location.hasPermission();
+    if (_permissionGranted == PermissionStatus.denied) {
+      _permissionGranted = await location.requestPermission();
+      if (_permissionGranted != PermissionStatus.granted) {
+        return;
+      }
+    }
+
+    LocationData currentLocation = await location.getLocation();
+    setState(() {
+      _currentPosition = LatLng(currentLocation.latitude!, currentLocation.longitude!);
+    });
+  }
+
+  // Handle map tap to get address
+  Future<void> _onMapTapped(LatLng tappedLatLng) async {
+    final response = await http.get(Uri.parse(
+        'https://api.barikoi.com/v1/reverse_geocode?lat=${tappedLatLng.latitude}&lng=${tappedLatLng.longitude}'));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      String address = data['address'] ?? 'Address not found';
+      setState(() {
+        _markers.add(
+          Marker(
+            markerId: MarkerId(tappedLatLng.toString()),
+            position: tappedLatLng,
+            infoWindow: InfoWindow(title: address),
+          ),
+        );
+        _address = address;
+      });
+    } else {
+      print('Failed to load address');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Barikoi Map"),
+      ),
+      body: _currentPosition == null
+          ? Center(child: CircularProgressIndicator())
+          : GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: _currentPosition!,
+                zoom: 15,
+              ),
+              onMapCreated: (controller) {
+                _mapController = controller;
+              },
+              onTap: _onMapTapped,
+              markers: _markers,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: true,
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _getCurrentLocation,
+        child: Icon(Icons.my_location),
+        tooltip: 'Get Current Location',
+      ),
+      bottomSheet: Container(
+        padding: EdgeInsets.all(8),
+        color: Colors.white,
+        child: Text(
+          _address,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+}
