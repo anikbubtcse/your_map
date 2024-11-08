@@ -5,6 +5,10 @@ sealed class GeolocationEvent extends Equatable {
 }
 
 class GeolocationEventAddress extends GeolocationEvent {
+  const GeolocationEventAddress({required this.latLng});
+
+  final LatLng latLng;
+
   @override
-  List<Object?> get props => [];
+  List<Object?> get props => [latLng];
 }

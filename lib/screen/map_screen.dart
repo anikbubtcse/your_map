@@ -1,12 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:loader_overlay/loader_overlay.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:your_map/exception/exception.dart';
 import 'package:your_map/utils/alert_dialog.dart';
 import 'package:your_map/utils/permission_checker.dart';
+
+import '../business_logic/geolocation_bloc/geolocation_bloc.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -20,6 +25,8 @@ class _MapScreenState extends State<MapScreen> {
       Completer<GoogleMapController>();
   CameraPosition? currentPosition;
   final Set<Marker> markers = {};
+  String? address;
+  LatLng? selectedLatLng;
 
   @override
   void initState() {
@@ -56,38 +63,122 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        backgroundColor: const Color(0xFFD2E9FF),
-        title: Text(
-          'Your Map',
-          style: GoogleFonts.poppins(
-              fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black),
+    return LoaderOverlay(
+      overlayColor: const Color(0x80808080),
+      child: Scaffold(
+        appBar: AppBar(
+          centerTitle: true,
+          backgroundColor: const Color(0xFFD2E9FF),
+          title: Text(
+            'Your Map',
+            style: GoogleFonts.poppins(
+                fontSize: 16, fontWeight: FontWeight.w500, color: Colors.black),
+          ),
+        ),
+        body: Column(
+          children: [
+            BlocConsumer<GeolocationBloc, GeolocationState>(
+                listener: (context, geoState) {
+              if (geoState is GeolocationServerError) {
+                context.loaderOverlay.hide();
+                MapAlertDialog.showAlertDialog(
+                    dialogName:
+                        'Something went wrong. Go back and try again later.',
+                    context: context);
+              }
+
+              if (geoState is GeolocationTokenInvalid) {
+                context.loaderOverlay.hide();
+                MapAlertDialog.showAlertDialog(
+                    dialogName:
+                        'Api token invalid. Go back and try again later.',
+                    context: context);
+              }
+
+              if (geoState is GeolocationNoInternet) {
+                context.loaderOverlay.hide();
+                MapAlertDialog.showAlertDialog(
+                    dialogName:
+                        'You must need internet. Please go back and check your internet connection.',
+                    context: context);
+              }
+
+              if (geoState is GeolocationAddressLoaded &&
+                  selectedLatLng != null) {
+                context.loaderOverlay.hide();
+
+                setState(() {
+                  address = geoState.addressModel.place.address;
+                  markers.clear();
+                  markers.add(Marker(
+                    markerId: MarkerId(selectedLatLng.toString()),
+                    position: selectedLatLng!,
+                    infoWindow: InfoWindow(title: address),
+                  ));
+                });
+              }
+            }, builder: (context, geoState) {
+              if (geoState is GeolocationLoading) {
+                context.loaderOverlay.show(
+                    widgetBuilder: (_) => const Center(
+                          child: SpinKitDoubleBounce(
+                            color: Colors.white,
+                            size: 60.0,
+                          ),
+                        ));
+              }
+
+              return Expanded(
+                child: currentPosition == null
+                    ? const Center(
+                        child: SpinKitDoubleBounce(
+                          color: Colors.black,
+                          size: 60.0,
+                        ),
+                      )
+                    : GoogleMap(
+                        mapType: MapType.normal,
+                        initialCameraPosition: currentPosition!,
+                        onMapCreated: (GoogleMapController controller) {
+                          _controller.complete(controller);
+                        },
+                        onTap: (LatLng latLng) async {
+                          selectedLatLng = latLng;
+
+                          context
+                              .read<GeolocationBloc>()
+                              .add(GeolocationEventAddress(latLng: latLng));
+
+                          final GoogleMapController controller =
+                              await _controller.future;
+
+                          setState(() {
+                            currentPosition = CameraPosition(
+                                target:
+                                    LatLng(latLng.latitude, latLng.longitude),
+                                zoom: 14.4746);
+                          });
+                          await controller.animateCamera(
+                              CameraUpdate.newCameraPosition(currentPosition!));
+
+                          setState(() {
+                            markers.clear();
+                            markers.add(Marker(
+                              markerId: MarkerId(latLng.toString()),
+                              position: latLng,
+                              infoWindow: InfoWindow(title: address),
+                            ));
+                          });
+                        },
+                        markers: markers,
+                        myLocationEnabled: true,
+                        myLocationButtonEnabled: true,
+                      ),
+              );
+            }),
+          ],
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: currentPosition == null
-                ? const Center(child: CircularProgressIndicator())
-                : GoogleMap(
-                    mapType: MapType.normal,
-                    initialCameraPosition: currentPosition!,
-                    onMapCreated: (GoogleMapController controller) {
-                      _controller.complete(controller);
-                    },
-                    onTap: (LatLng latLng) {},
-                    markers: markers,
-                  ),
-          ),
-        ],
-      ),
-      // floatingActionButton: FloatingActionButton.extended(
-      //   onPressed: _goToTheLake,
-      //   label: const Text('To the lake!'),
-      //   icon: const Icon(Icons.directions_boat),
-      // ),
     );
   }
 }
