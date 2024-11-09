@@ -21,7 +21,9 @@ class GeolocationBloc extends Bloc<GeolocationEvent, GeolocationState> {
   FutureOr<void> _onGeolocationEventAddress(
       GeolocationEventAddress event, Emitter<GeolocationState> emit) async {
     if (!await InternetInfo().getInternetConnection) {
-      emit(GeolocationNoInternet());
+      emit(const GeolocationNoInternet(
+          errorMessage:
+              'Internet access is required. Please go back and check your internet connection.'));
 
       return;
     }
@@ -43,13 +45,15 @@ class GeolocationBloc extends Bloc<GeolocationEvent, GeolocationState> {
     }
 
     if (response.statusCode == 401) {
-      emit(GeolocationTokenInvalid());
+      emit(const GeolocationTokenInvalid(
+          errorMessage: 'Api token invalid. Go back and try again later.'));
       return;
     }
     if (response.statusCode == 400 ||
         response.statusCode == 402 ||
         response.statusCode == 429) {
-      emit(GeolocationServerError());
+      emit(const GeolocationServerError(
+          errorMessage: 'Something went wrong. Go back and try again later.'));
       return;
     }
   }

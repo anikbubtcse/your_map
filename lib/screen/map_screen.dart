@@ -82,25 +82,19 @@ class _MapScreenState extends State<MapScreen> {
               if (geoState is GeolocationServerError) {
                 context.loaderOverlay.hide();
                 MapAlertDialog.showAlertDialog(
-                    dialogName:
-                        'Something went wrong. Go back and try again later.',
-                    context: context);
+                    dialogName: geoState.errorMessage, context: context);
               }
 
               if (geoState is GeolocationTokenInvalid) {
                 context.loaderOverlay.hide();
                 MapAlertDialog.showAlertDialog(
-                    dialogName:
-                        'Api token invalid. Go back and try again later.',
-                    context: context);
+                    dialogName: geoState.errorMessage, context: context);
               }
 
               if (geoState is GeolocationNoInternet) {
                 context.loaderOverlay.hide();
                 MapAlertDialog.showAlertDialog(
-                    dialogName:
-                        'You must need internet. Please go back and check your internet connection.',
-                    context: context);
+                    dialogName: geoState.errorMessage, context: context);
               }
 
               if (geoState is GeolocationAddressLoaded &&
